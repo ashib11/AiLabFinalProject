@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Pneumonia Detection</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        .upload-box { border: 2px dashed #ccc; padding: 20px; text-align: center; margin: 20px 0; }
+        #preview { max-width: 300px; margin: 20px auto; display: none; }
+        #result { margin-top: 20px; padding: 15px; border-radius: 5px; display: none; }
+        .pneumonia { background-color: #ffebee; border-left: 5px solid #f44336; }
+        .normal { background-color: #e8f5e9; border-left: 5px solid #4caf50; }
+    </style>
+</head>
+<body>
+    <h1>Pneumonia Detection from Chest X-Rays</h1>
+    <p>Upload a chest X-ray image to check for pneumonia</p>
+
+    <div class="upload-box" id="drop-area">
+        <p>Drag & drop your X-ray image here or click to browse</p>
+        <input type="file" id="file-input" accept="image/*">
+    </div>
+
+    <img id="preview" alt="Image preview">
+
+    <div id="result">
+        <h2>Result: <span id="prediction-text"></span></h2>
+        <p>Confidence: <span id="confidence"></span></p>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('file-input');
+        const preview = document.getElementById('preview');
+        const resultDiv = document.getElementById('result');
+        const predictionText = document.getElementById('prediction-text');
+        const confidenceSpan = document.getElementById('confidence');
+        const dropArea = document.getElementById('drop-area');
+
+        // Handle file selection
+        fileInput.addEventListener('change', function(e) {
+            if (fileInput.files && fileInput.files[0]) {
+                handleFile(fileInput.files[0]);
+            }
+        });
+
+        // Drag and drop handlers
+        dropArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropArea.style.borderColor = '#666';
+        });
+
+        dropArea.addEventListener('dragleave', () => {
+            dropArea.style.borderColor = '#ccc';
+        });
+
+        dropArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropArea.style.borderColor = '#ccc';
+            if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                fileInput.files = e.dataTransfer.files;
+                handleFile(e.dataTransfer.files[0]);
+            }
+        });
+
+        // Handle the file
+        function handleFile(file) {
+            const reader = new FileReader();
+
+            reader.onload = function(e) {
+                preview.src = e.target.result;
+                preview.style.display = 'block';
+                predictImage(file);
+            }
+
+            reader.readAsDataURL(file);
+        }
+
+        // Send image to server for prediction
+        function predictImage(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            fetch('/predict', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert(data.error);
+                    return;
+                }
+
+                resultDiv.style.display = 'block';
+                resultDiv.className = data.prediction.toLowerCase();
+                predictionText.textContent = data.prediction;
+                confidenceSpan.textContent = data.confidence;
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while processing the image');
+            });
+        }
+    </script>
+</body>
+</html>
