@@ -1,105 +1,249 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Pneumonia Detection</title>
-    <style>
-        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
-        .upload-box { border: 2px dashed #ccc; padding: 20px; text-align: center; margin: 20px 0; }
-        #preview { max-width: 300px; margin: 20px auto; display: none; }
-        #result { margin-top: 20px; padding: 15px; border-radius: 5px; display: none; }
-        .pneumonia { background-color: #ffebee; border-left: 5px solid #f44336; }
-        .normal { background-color: #e8f5e9; border-left: 5px solid #4caf50; }
-    </style>
+  <meta charset="UTF-8">
+  <title>Pneumonia Detection</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 600px;
+      margin: 40px auto;
+      padding: 20px;
+      text-align: center;
+    }
+    h1 {
+      margin-bottom: 10px;
+    }
+    .upload-box {
+      border: 2px dashed #ccc;
+      padding: 30px;
+      cursor: pointer;
+      transition: border-color 0.3s;
+    }
+    .upload-box:hover {
+      border-color: #4caf50;
+    }
+    #preview {
+      max-width: 100%;
+      margin-top: 20px;
+      display: none;
+    }
+    #loading {
+      margin-top: 20px;
+      display: none;
+    }
+    .spinner {
+      border: 5px solid #f3f3f3;
+      border-top: 5px solid #3498db;
+      border-radius: 50%;
+      width: 50px;
+      height: 50px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    #result {
+      margin-top: 20px;
+      padding: 15px;
+      border-radius: 8px;
+      display: none;
+      font-size: 18px;
+    }
+    .pneumonia {
+      background-color: #ffebee;
+      border-left: 5px solid #f44336;
+    }
+    .normal {
+      background-color: #e8f5e9;
+      border-left: 5px solid #4caf50;
+    }
+    button {
+      margin-top: 20px;
+      padding: 10px 20px;
+      font-size: 16px;
+      border: none;
+      background-color: #4caf50;
+      color: white;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+    button:hover {
+      background-color: #45a049;
+    }
+    input[type="file"] {
+      display: none;
+    }
+    #debug-info {
+      margin-top: 20px;
+      padding: 10px;
+      background-color: #f5f5f5;
+      border-radius: 5px;
+      text-align: left;
+      font-family: monospace;
+      font-size: 12px;
+      display: none;
+    }
+  </style>
 </head>
 <body>
-    <h1>Pneumonia Detection from Chest X-Rays</h1>
-    <p>Upload a chest X-ray image to check for pneumonia</p>
 
+  <h1>Pneumonia Detection</h1>
+  <p>Upload a chest X-ray image</p>
+
+  <form id="upload-form">
     <div class="upload-box" id="drop-area">
-        <p>Drag & drop your X-ray image here or click to browse</p>
-        <input type="file" id="file-input" accept="image/*">
+      <p>Drag & drop or click to select an image</p>
+      <input type="file" id="file-input" accept="image/*">
     </div>
 
-    <img id="preview" alt="Image preview">
+    <img id="preview" alt="Image Preview">
+    <button type="submit">Upload and Predict</button>
+  </form>
 
-    <div id="result">
-        <h2>Result: <span id="prediction-text"></span></h2>
-        <p>Confidence: <span id="confidence"></span></p>
-    </div>
+  <div id="loading">
+    <p>Processing...</p>
+    <div class="spinner"></div>
+  </div>
 
-    <script>
-        const fileInput = document.getElementById('file-input');
-        const preview = document.getElementById('preview');
-        const resultDiv = document.getElementById('result');
-        const predictionText = document.getElementById('prediction-text');
-        const confidenceSpan = document.getElementById('confidence');
-        const dropArea = document.getElementById('drop-area');
+  <div id="result">
+    <h2>Result: <span id="prediction-text"></span></h2>
+    <p>Confidence: <span id="confidence"></span></p>
+  </div>
 
-        // Handle file selection
-        fileInput.addEventListener('change', function(e) {
-            if (fileInput.files && fileInput.files[0]) {
-                handleFile(fileInput.files[0]);
-            }
+  <div id="debug-info"></div>
+
+  <script>
+    const fileInput = document.getElementById('file-input');
+    const dropArea = document.getElementById('drop-area');
+    const preview = document.getElementById('preview');
+    const uploadForm = document.getElementById('upload-form');
+    const loading = document.getElementById('loading');
+    const result = document.getElementById('result');
+    const predictionText = document.getElementById('prediction-text');
+    const confidence = document.getElementById('confidence');
+    const debugInfo = document.getElementById('debug-info');
+
+
+    function debugLog(message) {
+      debugInfo.style.display = 'block';
+      debugInfo.innerHTML += `<div>${new Date().toLocaleTimeString()}: ${message}</div>`;
+      console.log(message);
+    }
+
+
+    dropArea.addEventListener('click', () => {
+      debugLog('Clicked upload box');
+      fileInput.click();
+    });
+
+
+    dropArea.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropArea.style.borderColor = '#4caf50';
+      debugLog('Drag over detected');
+    });
+
+    dropArea.addEventListener('dragleave', (e) => {
+      e.preventDefault();
+      dropArea.style.borderColor = '#ccc';
+      debugLog('Drag leave detected');
+    });
+
+    dropArea.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropArea.style.borderColor = '#ccc';
+      const files = e.dataTransfer.files;
+      debugLog(`Files dropped: ${files.length}`);
+
+      if (files.length) {
+        fileInput.files = files;
+        previewFile(files[0]);
+      }
+    });
+
+    fileInput.addEventListener('change', () => {
+      debugLog(`File selected: ${fileInput.files.length} files`);
+      if (fileInput.files.length) {
+        previewFile(fileInput.files[0]);
+      }
+    });
+
+    function previewFile(file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        preview.src = e.target.result;
+        preview.style.display = 'block';
+        debugLog(`Preview generated for file: ${file.name}`);
+      };
+      reader.onerror = (e) => {
+        debugLog(`Error reading file: ${e.target.error}`);
+      };
+      reader.readAsDataURL(file);
+    }
+
+    uploadForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      debugLog('Form submission started');
+
+      if (!fileInput.files.length) {
+        debugLog('No file selected - showing alert');
+        alert('Please select an image first.');
+        return;
+      }
+
+      loading.style.display = 'block';
+      result.style.display = 'none';
+      debugInfo.style.display = 'block';
+
+      const formData = new FormData();
+      formData.append('file', fileInput.files[0]);
+      debugLog(`Preparing to upload: ${fileInput.files[0].name}`);
+
+      try {
+        debugLog('Starting fetch request to /predict');
+        const response = await fetch('http://localhost:5000/predict', {
+          method: 'POST',
+          body: formData
         });
 
-        // Drag and drop handlers
-        dropArea.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            dropArea.style.borderColor = '#666';
-        });
+        debugLog(`Received response status: ${response.status}`);
 
-        dropArea.addEventListener('dragleave', () => {
-            dropArea.style.borderColor = '#ccc';
-        });
-
-        dropArea.addEventListener('drop', (e) => {
-            e.preventDefault();
-            dropArea.style.borderColor = '#ccc';
-            if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-                fileInput.files = e.dataTransfer.files;
-                handleFile(e.dataTransfer.files[0]);
-            }
-        });
-
-        // Handle the file
-        function handleFile(file) {
-            const reader = new FileReader();
-
-            reader.onload = function(e) {
-                preview.src = e.target.result;
-                preview.style.display = 'block';
-                predictImage(file);
-            }
-
-            reader.readAsDataURL(file);
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Server responded with ${response.status}: ${errorText}`);
         }
 
-        // Send image to server for prediction
-        function predictImage(file) {
-            const formData = new FormData();
-            formData.append('file', file);
+        const data = await response.json();
+        debugLog(`Response data: ${JSON.stringify(data)}`);
 
-            fetch('/predict', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.error) {
-                    alert(data.error);
-                    return;
-                }
+        loading.style.display = 'none';
 
-                resultDiv.style.display = 'block';
-                resultDiv.className = data.prediction.toLowerCase();
-                predictionText.textContent = data.prediction;
-                confidenceSpan.textContent = data.confidence;
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('An error occurred while processing the image');
-            });
+        if (data.success) {
+          result.style.display = 'block';
+          result.className = data.prediction.toLowerCase();
+          predictionText.textContent = data.prediction;
+          confidence.textContent = data.confidence;
+          debugLog(`Prediction successful: ${data.prediction}`);
+        } else {
+          debugLog(`Server returned error: ${data.error}`);
+          alert('Error: ' + (data.error || 'Unknown error.'));
         }
-    </script>
+      } catch (err) {
+        loading.style.display = 'none';
+        debugLog(`Error during fetch: ${err.message}`);
+        console.error('Error details:', err);
+        alert('Error uploading image. Check debug console for details.');
+      }
+    });
+
+
+    debugLog('Application initialized');
+    debugLog(`Using API endpoint: http://localhost:5000/predict`);
+  </script>
+
 </body>
 </html>
