@@ -229,32 +229,12 @@ y_true = np.array(y_true)
 y_pred = np.array(y_pred)
 
 
-def find_optimal_threshold(y_true, y_pred, method='youden'):
-    fpr, tpr, thresholds = roc_curve(y_true, y_pred)
-
-    if method == 'youden':
-        scores = tpr - fpr
-    elif method == 'gmean':
-        scores = np.sqrt(tpr * (1 - fpr))
-    elif method == 'f1':
-        precision, recall, _ = precision_recall_curve(y_true, y_pred)
-        scores = 2 * (precision * recall) / (precision + recall + 1e-9)
-        return thresholds[np.argmax(scores)]
-
-    optimal_idx = np.argmax(scores)
-    return thresholds[optimal_idx]
-
-
-best_threshold = find_optimal_threshold(y_true, y_pred, method='youden')
-print(f"\nOptimal Classification Threshold: {best_threshold:.3f}")
-np.save('best_threshold.npy', best_threshold)
-
 plt.figure(figsize=(8, 6))
-cm = confusion_matrix(y_true, y_pred > best_threshold)
+cm = confusion_matrix(y_true, y_pred > 0.5)
 sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
             xticklabels=['Normal', 'Pneumonia'],
             yticklabels=['Normal', 'Pneumonia'])
-plt.title(f'Confusion Matrix (Threshold={best_threshold:.2f})')
+plt.title('Confusion Matrix (Threshold=0.3)')
 plt.xlabel('Predicted')
 plt.ylabel('Actual')
 plt.show()
@@ -275,12 +255,6 @@ roc_auc = auc(fpr, tpr)
 plt.figure(figsize=(8, 6))
 plt.plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC curve (area = {roc_auc:.2f})')
 plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
-
-optimal_idx = np.argmax(tpr - fpr)
-plt.scatter(fpr[optimal_idx], tpr[optimal_idx], marker='o', color='red',
-            label=f'Optimal Threshold ({best_threshold:.2f})')
-
-
 plt.xlim([0.0, 1.0])
 plt.ylim([0.0, 1.05])
 plt.xlabel('False Positive Rate')

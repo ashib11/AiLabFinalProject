@@ -5,36 +5,25 @@ import numpy as np
 import tensorflow as tf
 import os
 
+
 app = Flask(__name__)
 app.debug = True
+
 CORS(app)
 
 
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg'}
+
+
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-
-try:
-
-    model_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'pneumonia_model.h5')
-    model = tf.keras.models.load_model(model_path)
-
-
-    threshold_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'best_threshold.npy')
-    BEST_THRESHOLD = np.load(threshold_path).item()
-
-    print(f"Model loaded successfully! Optimal threshold: {BEST_THRESHOLD:.4f}")
-except Exception as e:
-    print(f"Error loading model/threshold: {e}")
-    raise
 
 
 def allowed_file(filename):
     return '.' in filename and \
-        filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
-
+           filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
 
 def preprocess_image(image_path):
     img = tf.keras.preprocessing.image.load_img(image_path, target_size=(128, 128))
@@ -50,51 +39,71 @@ def preprocess_image(image_path):
     return np.expand_dims(img_array, axis=0)
 
 
+try:
+    model_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'pneumonia_model.h5')
+    model = tf.keras.models.load_model(model_path)
+    print("✅ Model loaded successfully!")
+except Exception as e:
+    print(f"Error loading model: {e}")
+    raise
+
+
 @app.route('/')
 def home():
+    print("Home route accessed")
     return render_template('index.html')
-
 
 @app.route('/predict', methods=['POST'])
 def predict():
+    print("\nReceived prediction request")
     try:
         if 'file' not in request.files:
+            print("⚠️ No file in request")
             return jsonify({'error': 'No file uploaded'}), 400
 
         file = request.files['file']
+        print(f"📄 File received: {file.filename}")
+
         if file.filename == '':
+            print("⚠️ Empty filename")
             return jsonify({'error': 'No selected file'}), 400
 
-        if not allowed_file(file.filename):
+        if file and allowed_file(file.filename):
+            filename = secure_filename(file.filename)
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(filepath)
+            print(f"File saved to: {filepath}")
+
+
+            processed_img = preprocess_image(filepath)
+            print("🖼️ Image preprocessed")
+
+            prediction = model.predict(processed_img)[0][0]
+            print(f"🔮 Raw prediction value: {prediction}")
+
+            result = "Pneumonia" if prediction > 0.5 else "Normal"
+            confidence = float(prediction if result == "Pneumonia" else 1 - prediction)
+            print(f"🎯 Result: {result} (Confidence: {confidence:.2%})")
+
+            return jsonify({
+                'success': True,
+                'prediction': result,
+                'confidence': f"{confidence:.2%}",
+                'probability': float(prediction)
+            })
+
+        else:
+            print("Invalid file type")
             return jsonify({'error': 'Invalid file type. Allowed: png, jpg, jpeg'}), 400
 
-
-        filename = secure_filename(file.filename)
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        file.save(filepath)
-
-
-        processed_img = preprocess_image(filepath)
-        prediction = model.predict(processed_img, verbose=0)[0][0]
-
-
-        is_pneumonia = prediction > BEST_THRESHOLD
-        confidence = prediction if is_pneumonia else 1 - prediction
-
-        return jsonify({
-            'success': True,
-            'prediction': 'Pneumonia' if is_pneumonia else 'Normal',
-            'confidence': f"{confidence:.2%}",
-            'probability': float(prediction),
-            'threshold': float(BEST_THRESHOLD)
-        })
-
     except Exception as e:
+        print(f"🔥 Error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
     finally:
         if 'filepath' in locals() and os.path.exists(filepath):
             os.remove(filepath)
+            print("🧹 Temporary file cleaned up")
 
 
 if __name__ == '__main__':
